@@ -37,9 +37,9 @@ function renderStaff(){
  metric(cards,'総売上（フリー込み）',yen(record.total),'元資料の独立項目');
  metric(cards,'店販売上',yen(record.retail),'店販比率 '+(record.retail!=null&&record.total?pct(record.retail/record.total*100):'未登録'));
  metric(cards,'指名客数',num(record.namedCustomers)+'名','指名技術単価 '+yen(record.namedCustomers?record.named/record.namedCustomers:null));
- const p=panel(m+'月の客数・再来店・失客');
+ const p=panel(m+'月の客数・再来店・失客');if(m===10){add(p,'p','notice','10月の再来店率・失客数は元資料に未掲載です。次回予約率66.0%などとは別指標です。');}else if(m===9){add(p,'p','muted','9月の失客数は別集計の実績を参照しています。');}
  const detail=add(p,'div','detailgrid');
- const fields=[['総客数',record.totalCustomers,'people'],['フリー客数',record.freeCustomers,'people'],['新規客数',record.newCustomers,'people'],['新規指名',record.newNamedCustomers,'people'],['次回予約率',record.reservation,'percent'],['指名前年比',record.yearOverYear,'percent'],['失客数',record.lostCustomers,'people'],['新規再来率',record.retentionNew,'percent'],['新再率',record.retentionNewReturn,'percent'],['再来率',record.retentionRepeat,'percent'],['常連再来率',record.retentionRegular,'percent'],['リターン率',record.retentionReturn,'percent']];
+ const fields=[['総客数',record.totalCustomers,'people'],['フリー客数',record.freeCustomers,'people'],['新規客数',record.newCustomers,'people'],['新規指名',record.newNamedCustomers,'people'],['次回予約率',record.reservation,'percent'],['指名前年比',record.yearOverYear,'percent'],['失客数',record.lostCustomers??(m===9?person.summary?.lostCustomersSeptember:null),'people'],['新規再来率',record.retentionNew,'percent'],['新再率',record.retentionNewReturn,'percent'],['再来率',record.retentionRepeat,'percent'],['常連再来率',record.retentionRegular,'percent'],['リターン率',record.retentionReturn,'percent']];
  for(const [label,value,unit] of fields){
   const d=add(detail,'div','detail');add(d,'small','',label);
   add(d,'b','',value==null?'未登録':unit==='percent'?pct(value):num(value)+'名');
