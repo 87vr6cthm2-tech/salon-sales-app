@@ -112,6 +112,43 @@ function renderStaff(){
    chart('失客数の月別推移',person.months.filter(x=>x.month<=9),x=>x.lostCustomers,null,'people');
   }
   if(section==='sales'||section==='customers')monthlyTable(content,person.months,section==='sales'?[['指名技術売上','named','yen'],['総売上','total','yen'],['店販','retail','yen'],['指名客数','namedCustomers','people'],['前年比','yearOverYear','pct']]:[['総客数','totalCustomers','people'],['指名客数','namedCustomers','people'],['フリー客数','freeCustomers','people'],['新規','newCustomers','people'],['新規指名','newNamedCustomers','people']]);
+
+  // Individual coaching cards: saved locally and never included in public source data.
+  const noteKey='salon-note-coaching-v1';
+  let saved={};try{saved=JSON.parse(localStorage.getItem(noteKey)||'{}')||{}}catch(e){}
+  const recordKey=person.name+'-2026-'+m;
+  const state=saved[recordKey]||{};
+  const coaching=add(content,'section','modern-panel coach-panel');
+  add(coaching,'h3','','次の成長につなげる');
+  add(coaching,'p','muted','数字から改善候補を確認し、今月取り組む行動を1つ決めます。');
+  const named=selected?.named??null,people=selected?.namedCustomers??null,totalSales=selected?.total??null,retail=selected?.retail??null;
+  const ratio=totalSales&&retail!=null?100*retail/totalSales:null;
+  const ticket=people&&named!=null?named/people:null;
+  const reserve=selected?.reservation??null;
+  const suggestions=[];
+  if(ratio!=null&&ratio<10)suggestions.push({id:'retail',label:'店販比率',value:pct(ratio),target:'10%',action:'使用商品の説明とホームケア提案を行う'});
+  if(ticket!=null&&ticket<12000)suggestions.push({id:'ticket',label:'指名技術客単価',value:yen(ticket),target:'¥12,000',action:'お客様の悩みに合わせて追加メニューを提案する'});
+  if(reserve!=null&&reserve<60)suggestions.push({id:'reserve',label:'次回予約率',value:pct(reserve),target:'60%',action:'次回来店の時期を具体的に案内する'});
+  if(!suggestions.length)add(coaching,'p','coach-good','設定済みの共通KPIは達成、または未登録です。次月の維持・改善テーマを設定しましょう。');
+  else{const best=suggestions[0];add(coaching,'div','coach-focus','改善候補：'+best.label+' '+best.value+' ／ 目標 '+best.target);add(coaching,'p','',best.action);}
+  const goalBox=add(coaching,'div','coach-goal');
+  const goalLabel=add(goalBox,'label','','指名売上の個人目標（月額・円）');
+  const goalInput=add(goalLabel,'input');goalInput.type='number';goalInput.min='0';goalInput.step='1000';goalInput.inputMode='numeric';goalInput.placeholder='例：1800000';goalInput.value=state.namedGoal??'';
+  const progress=add(goalBox,'p','coach-progress','');
+  const actionLabel=add(coaching,'label','coach-action-label','今月の行動目標');
+  const action=add(actionLabel,'textarea');action.rows=2;action.maxLength=240;action.placeholder='例：使用商品の説明を毎日実施する';action.value=state.action??(suggestions[0]?.action||'');
+  const checkLabel=add(coaching,'label','coach-check-label');
+  const check=add(checkLabel,'input');check.type='checkbox';check.checked=!!state.completed;
+  add(checkLabel,'span','','今月の取り組みを実行した');
+  const noteLabel=add(coaching,'label','coach-action-label','振り返りメモ');
+  const memo=add(noteLabel,'textarea');memo.rows=2;memo.maxLength=400;memo.placeholder='成果と翌月に変えること';memo.value=state.memo??'';
+  const feedback=add(coaching,'p','muted','');
+  const updateProgress=()=>{const target=Number(goalInput.value);progress.textContent=target>0&&Number.isFinite(target)&&named!=null?'目標達成率 '+pct(100*named/target)+' ／ 目標との差 '+yen(named-target):'個人目標を入力すると達成率を表示します。'};
+  updateProgress();
+  goalInput.oninput=updateProgress;
+  const saveButton=add(coaching,'button','coach-save','行動目標とメモを保存');
+  saveButton.onclick=()=>{const value=goalInput.value.trim();if(value&&(Number(value)<=0||!Number.isFinite(Number(value)))){feedback.textContent='目標は正の数字を入力してください。';return;}try{const all=JSON.parse(localStorage.getItem(noteKey)||'{}')||{};all[recordKey]={namedGoal:value===''?null:Number(value),action:action.value.slice(0,240),completed:check.checked,memo:memo.value.slice(0,400)};localStorage.setItem(noteKey,JSON.stringify(all));feedback.textContent='この端末に保存しました。';}catch(e){feedback.textContent='保存に失敗しました。空き容量などをご確認ください。';}};
+
   const note=add(content,'p','notice','15日締めの個人実績。店販を総売上（フリー込み）へ重複加算しません。再来店率・失客数は9月まで。金額の税込・税抜区分は未確認です。');
  }
  function monthlyTable(parent,rows,series){
