@@ -20,37 +20,109 @@ const goals=add($('body'),'div','detailgrid');const values=[['店販比率',v('s
 const x=panel('月別詳細・前年比');table(x,['月','総売上','前年','前年比','技術','店販','客数','新規','次回予約'],rows.map(r=>[r.month+'月',yen(r.sales),yen(r.prevSales),pct(r.prevSales?100*r.sales/r.prevSales:null),yen(r.technical),yen(r.retail),num(r.customers),num(r.newCustomers),pct(r.reservation)]));
 const n=add($('body'),'p','notice','店舗データは月末締めです。未登録月は表示しません。生産性・次回予約率の累計欄は月別値の単純平均です。')}
 function renderStaff(){
- const m=Number($('period').value);
- const tool=add($('body'),'div','tools');
- add(tool,'label','','スタイリスト');
- const select=add(tool,'select');
- for(const person of data.staff){const option=add(select,'option','',person.name);option.value=person.name;}
- if(!data.staff.some(x=>x.name===staff))staff=data.staff[0]?.name||'';
- select.value=staff;
- select.onchange=()=>{staff=select.value;show();};
- const person=data.staff.find(x=>x.name===staff);
- if(!person){add($('body'),'p','empty','スタッフ実績は未登録です');return;}
- const record=person.months.find(x=>Number(x.month)===m);
- if(!record){add($('body'),'p','empty',m+'月は未登録です');return;}
- const cards=add($('body'),'div','metrics');
- metric(cards,'指名技術売上',yen(record.named),'前年同月比 '+pct(record.yearOverYear),true);
- metric(cards,'総売上（フリー込み）',yen(record.total),'元資料の独立項目');
- metric(cards,'店販売上',yen(record.retail),'店販比率 '+(record.retail!=null&&record.total?pct(record.retail/record.total*100):'未登録'));
- metric(cards,'指名客数',num(record.namedCustomers)+'名','指名技術単価 '+yen(record.namedCustomers?record.named/record.namedCustomers:null));
- const p=panel(m+'月の客数・再来店・失客');if(m===10){add(p,'p','notice','10月の再来店率・失客数は元資料に未掲載です。次回予約率66.0%などとは別指標です。');}else if(m===9){add(p,'p','muted','9月の失客数は別集計の実績を参照しています。');}
- const detail=add(p,'div','detailgrid');
- const fields=[['総客数',record.totalCustomers,'people'],['フリー客数',record.freeCustomers,'people'],['新規客数',record.newCustomers,'people'],['新規指名',record.newNamedCustomers,'people'],['次回予約率',record.reservation,'percent'],['指名前年比',record.yearOverYear,'percent'],['失客数',record.lostCustomers??(m===9?person.summary?.lostCustomersSeptember:null),'people'],['新規再来率',record.retentionNew,'percent'],['新再率',record.retentionNewReturn,'percent'],['再来率',record.retentionRepeat,'percent'],['常連再来率',record.retentionRegular,'percent'],['リターン率',record.retentionReturn,'percent'],['累計再来店率',record.retentionCumulative,'percent']];
- for(const [label,value,unit] of fields){
-  const d=add(detail,'div','detail');add(d,'small','',label);
-  add(d,'b','',value==null?'未登録':unit==='percent'?pct(value):num(value)+'名');
+ const root=$('body'),personData=data.staff;
+ if(!personData.length){add(root,'p','empty','スタッフデータがありません');return;}
+ if(!personData.some(x=>x.name===staff))staff=personData[0].name;
+ const person=personData.find(x=>x.name===staff);
+ let m=Number($('period').value);
+ if(!Number.isInteger(m)||m<1)m=10;
+ let mode='month',section='sales';
+ const format=(x,type='yen')=>x==null?'未入力':type==='yen'?yen(x):type==='pct'?pct(x):num(x)+'名';
+ const previous=r=>r&&r.yearOverYear>0?r.named*100/r.yearOverYear:null;
+ const aggregate=(arr,k)=>arr.length&&arr.every(x=>x[k]!=null)?arr.reduce((n,x)=>n+x[k],0):null;
+ const makeButton=(parent,label,onClick,selected)=>{const b=add(parent,'button','picker-button'+(selected?' selected':''),label);b.type='button';b.onclick=onClick;return b;};
+ const staffRow=add(root,'div','staff-choices');
+ for(const p of personData)makeButton(staffRow,p.name,()=>{staff=p.name;show();},p.name===staff);
+ const controls=add(root,'div','staff-controls');
+ const modeLabel=add(controls,'label','','集計　'),modeSelect=add(modeLabel,'select');
+ for(const [key,name] of [['month','単月'],['year','1〜10月累計']]){const option=add(modeSelect,'option','',name);option.value=key;}
+ modeSelect.value=mode;
+ const sectionTabs=add(root,'div','section-choices');
+ const content=add(root,'div','staff-content');
+ function refresh(){
+  content.replaceChildren();
+  const rows=person.months.filter(r=>mode==='year'||r.month===m);
+  const r=person.months.find(x=>x.month===m);
+  const year=mode==='year',periodName=year?'2026年 1〜10月':'2026年 '+m+'月';
+  const head=add(content,'h2','staff-heading',person.name);
+  add(head,'span','period-pill',periodName);
+  const v=k=>year?aggregate(rows,k):r?.[k]??null;
+  const annualPrev=()=>{if(!year)return previous(r);if(person.yearOverYear>0)return v('named')*100/person.yearOverYear;return null;};
+  function highlight(label,value,prev,yearPct){
+   const big=add(content,'section','hero-card');
+   add(big,'div','hero-label',label);
+   add(big,'strong','hero-number',value==null?'未入力':yen(value));
+   if(yearPct!=null){const meta=add(big,'div','hero-meta');add(meta,'b','', '前年比 '+pct(yearPct));if(value!=null&&prev!=null)add(meta,'span','', '　'+(value>=prev?'+':'−')+yen(Math.abs(value-prev)));}
+   add(big,'div','hero-previous','前年 '+(prev==null?'未入力':yen(prev)));
+  }
+  const mini=(label,val,sub)=>{const card=add(content,'div','mini-card');add(card,'div','mini-label',label);add(card,'strong','mini-number',val);if(sub)add(card,'div','mini-sub',sub);return card;};
+  const miniGrid=()=>add(content,'div','mini-grid');
+  function chart(title,arr,current,prior,type='yen'){
+   const p=add(content,'section','modern-panel');add(p,'h3','',title);
+   const legend=add(p,'div','chart-legend','● 2026年　');
+   add(legend,'span','','┄ 2025年');
+   const valid=arr.filter(x=>current(x)!=null);
+   if(!valid.length){add(p,'p','muted','表示できる月別データはありません');return;}
+   const width=670,height=210,left=52,right=12,top=18,bottom=30;
+   const all=arr.flatMap(x=>[current(x),prior?prior(x):null]).filter(x=>Number.isFinite(x));
+   const max=Math.max(1,...all)*1.13;
+   const ns='http://www.w3.org/2000/svg', svg=document.createElementNS(ns,'svg');
+   svg.setAttribute('viewBox', '0 0 '+width+' '+height);svg.setAttribute('role','img');svg.setAttribute('aria-label',title);
+   svg.style.cssText='width:100%;height:auto;display:block;margin-top:20px';
+   const xs=i=>left+(width-left-right)*i/Math.max(1,arr.length-1);
+   const ys=value=>height-bottom-(height-top-bottom)*value/max;
+   const node=(tag,attrs,text)=>{const n=document.createElementNS(ns,tag);for(const [k,v]of Object.entries(attrs))n.setAttribute(k,String(v));if(text!=null)n.textContent=String(text);svg.append(n);return n;};
+   for(let j=0;j<3;j++){const y=height-bottom-j*(height-top-bottom)/2;node('line',{x1:left,x2:width-right,y1:y,y2:y,stroke:'#dfe5df','stroke-width':1});const number=Math.round(max*j/2);node('text',{x:2,y:y+4,fill:'#82918b','font-size':11},type==='yen'?(number/10000).toFixed(0)+'万':type==='pct'?number+'%':number);}
+   for(let i=0;i<arr.length;i++)node('text',{x:xs(i),y:height-7,'text-anchor':'middle',fill:'#7b8c85','font-size':11},arr[i].month+'月');
+   const lineFor=(fn,color,dash)=>{let path='';arr.forEach((x,i)=>{const val=fn(x);if(val==null||!Number.isFinite(val))return;path+=(path?' L ':'M ')+xs(i).toFixed(1)+' '+ys(val).toFixed(1);});if(path)node('path',{d:path,fill:'none',stroke:color,'stroke-width':3,'stroke-dasharray':dash||'','stroke-linecap':'round','stroke-linejoin':'round'});};
+   if(prior)lineFor(prior,'#b0bcb4','6 6');
+   lineFor(current,'#2f7259','');
+   arr.forEach((x,i)=>{const value=current(x);if(value!=null)node('circle',{cx:xs(i),cy:ys(value),r:x.month===m?5:3.5,fill:'#2f7259'});});
+   p.append(svg);
+  }
+  const selected=r;
+  if(section==='sales'){
+   const amount=v('named'),before=annualPrev(),yoy=year?person.yearOverYear:selected?.yearOverYear;
+   highlight('指名技術売上〈暫定〉',amount,before,yoy);
+   const grid=miniGrid();
+   const customers=v('namedCustomers');
+   const addCard=(label,value,sub)=>{const z=add(grid,'div','mini-card');add(z,'div','mini-label',label);add(z,'strong','mini-number',value);if(sub)add(z,'div','mini-sub',sub);};
+   addCard('指名客数',format(customers,'people'),year?'1〜10月合計':'前年の指名客数は資料確認中');
+   addCard('指名技術客単価〈暫定〉',customers?yen(amount/customers):'未入力','目標 ¥12,000');
+   addCard('総売上（フリー込み）',format(v('total')),'元資料の独立項目');
+   addCard('店販売上',format(v('retail')),'目標 店販比率10%');
+   chart('指名売上の推移',person.months,x=>x.named,previous);
+  }else if(section==='customers'){
+   const grid=miniGrid();const addCard=(label,value)=>{const z=add(grid,'div','mini-card');add(z,'div','mini-label',label);add(z,'strong','mini-number',format(value,'people'));};
+   for(const [label,key]of [['総客数','totalCustomers'],['指名客数','namedCustomers'],['フリー客数','freeCustomers'],['新規客数','newCustomers'],['新規指名','newNamedCustomers']])addCard(label,v(key));
+   chart('指名客数の推移',person.months,x=>x.namedCustomers,null,'people');
+  }else if(section==='retention'){
+   const keys=[['新規','retentionNew'],['新再','retentionNewReturn'],['再来','retentionRepeat'],['常連','retentionRegular'],['リターン','retentionReturn'],['累計','retentionCumulative']];
+   const p=add(content,'section','modern-panel');add(p,'h3','', '再来店率 '+(year?'（1〜9月平均）':'（'+m+'月）'));
+   if(year)add(p,'p','muted','元資料の集計済み平均値。10月は未登録です。');
+   const summary=person.summary?.retentionAverageJanSep||{};
+   const summaryKeys={retentionNew:'new',retentionNewReturn:'newReturn',retentionRepeat:'repeat',retentionRegular:'regular',retentionReturn:'return',retentionCumulative:'cumulative'};
+   const rows=keys.map(([label,key])=>[label,pct(year?(summary[summaryKeys[key]]??null):r?.[key]??null)]);
+   table(p,['区分','選択期間'],rows);
+   const details=add(content,'details','modern-panel');const title=add(details,'summary','', '月別の再来店率を見る');title.style.cursor='pointer';
+   monthlyTable(details,person.months,[['新規','retentionNew','pct'],['新再','retentionNewReturn','pct'],['再来','retentionRepeat','pct'],['常連','retentionRegular','pct'],['リターン','retentionReturn','pct'],['累計','retentionCumulative','pct']]);
+  }else if(section==='lost'){
+   const val=year?person.summary?.lostCustomersJanSep:v('lostCustomers');
+   const grid=miniGrid(),card=add(grid,'div','mini-card');add(card,'div','mini-label','失客数 '+(year?'（1〜9月）':'（'+m+'月）'));add(card,'strong','mini-number',val==null?'未入力':num(val)+'名');
+   chart('失客数の月別推移',person.months.filter(x=>x.month<=9),x=>x.lostCustomers,null,'people');
+  }
+  if(section==='sales'||section==='customers')monthlyTable(content,person.months,section==='sales'?[['指名技術売上','named','yen'],['総売上','total','yen'],['店販','retail','yen'],['指名客数','namedCustomers','people'],['前年比','yearOverYear','pct']]:[['総客数','totalCustomers','people'],['指名客数','namedCustomers','people'],['フリー客数','freeCustomers','people'],['新規','newCustomers','people'],['新規指名','newNamedCustomers','people']]);
+  const note=add(content,'p','notice','15日締めの個人実績。店販を総売上（フリー込み）へ重複加算しません。再来店率・失客数は9月まで。金額の税込・税抜区分は未確認です。');
  }
- const targets=panel('目標との差');
- const grid=add(targets,'div','detailgrid');
- const goals=[['店販比率',record.retail!=null&&record.total?record.retail/record.total*100:null,10,'%'],['指名技術客単価',record.namedCustomers?record.named/record.namedCustomers:null,12000,'円'],['次回予約率',record.reservation,60,'%']];
- for(const [name,value,target,unit] of goals){const d=add(grid,'div','detail');d.style.borderLeft=value!=null&&value>=target?'4px solid #598c6b':'4px solid #ba835c';add(d,'small','',name+'／目標 '+(unit==='円'?yen(target):pct(target)));add(d,'b','',value==null?'未登録':unit==='円'?yen(value):pct(value));add(d,'small','',value==null?'':(value>=target?'達成':'未達')+'・差 '+(unit==='円'?yen(value-target):(value-target).toFixed(1)+'pt'));}
- const bar=panel('指名売上の月別推移');bars(bar,person.months,'named');
- monthlyTrend('毎月の実績一覧',person.months,[['指名売上','named','yen'],['総売上','total','yen'],['店販','retail','yen'],['指名客数','namedCustomers','num'],['指名単価',x=>x.namedCustomers?x.named/x.namedCustomers:null,'yen'],['次回予約率','reservation','pct'],['指名前年比','yearOverYear','pct'],['失客数','lostCustomers','num'],['新規客数','newCustomers','num'],['総客数','totalCustomers','num'],['フリー客数','freeCustomers','num'],['新規指名','newNamedCustomers','num'],['新規再来率','retentionNew','pct'],['新再率','retentionNewReturn','pct'],['再来率','retentionRepeat','pct'],['常連再来率','retentionRegular','pct'],['リターン率','retentionReturn','pct'],['累計再来店率','retentionCumulative','pct']]);
- add($('body'),'p','notice','15日締め。累計ではなく選択月の実績を表示します。月別の元資料がない客数・再来店・失客の項目は「未登録」です。山岸の2026年6月の売上は元資料に不整合があります。');
+ function monthlyTable(parent,rows,series){
+  const p=add(parent,'div','modern-table-container'),t=add(p,'table','table'),head=add(t,'thead'),h=add(head,'tr');
+  ['月',...series.map(x=>x[0])].forEach(x=>add(h,'th','',x));const body=add(t,'tbody');
+  for(const row of rows){const tr=add(body,'tr');add(tr,'td','',row.month+'月');for(const [name,key,type]of series){const value=row[key];add(tr,'td','',format(value,type));}}
+ }
+ const sectionNames=[['sales','売上'],['customers','客数内訳'],['retention','再来店率'],['lost','失客数']];
+ for(const [id,label]of sectionNames)makeButton(sectionTabs,label,()=>{section=id;Array.from(sectionTabs.children).forEach((b,i)=>b.classList.toggle('selected',sectionNames[i][0]===section));refresh();},section===id);
+ modeSelect.onchange=()=>{mode=modeSelect.value;refresh();};
+ refresh();
 }
 $('storeTab').onclick=()=>{tab='store';render()};$('staffTab').onclick=()=>{tab='staff';render()};$('period').onchange=show;
 $('import').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>3000000)throw Error('ファイルが大きすぎます');const obj=validate(JSON.parse(await file.text()));localStorage.setItem(key,JSON.stringify(obj));data=obj;render()}catch(err){alert('読み込みできません: '+err.message)}e.target.value=''};
