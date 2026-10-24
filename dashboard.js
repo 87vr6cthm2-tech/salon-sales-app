@@ -92,7 +92,10 @@ function renderStaff(){
    addCard('総売上（フリー込み）',format(v('total')),'元資料の独立項目');
    addCard('店販売上',format(v('retail')),'目標 店販比率10%');
    const lostCount=year?(person.summary?.lostCustomersJanSep??null):(selected?.lostCustomers??(m===9?person.summary?.lostCustomersSeptember:null));
-   addCard('失客数',lostCount==null?'未登録':num(lostCount)+'名',year?'1〜9月の合計（10月は未登録）':m===10?'10月はデータ未登録':'選択月の失客人数');
+   const priorLost=person.months.find(x=>Number(x.month)===m-1)?.lostCustomers??null;
+   const difference=!year&&lostCount!=null&&priorLost!=null?lostCount-priorLost:null;
+   const lostNote=year?'1〜9月の合計（10月は未登録）':lostCount==null?'選択月のデータ未登録':difference==null?'前月比：比較データなし':difference===0?'前月比：±0名（変化なし）':difference>0?'前月比：+'+num(difference)+'名（増加）':'前月比：'+num(difference)+'名（減少）';
+   addCard('失客数',lostCount==null?'未登録':num(lostCount)+'名',lostNote);
    chart('指名売上の推移',person.months,x=>x.named,previous);
   }else if(section==='customers'){
    const grid=miniGrid();const addCard=(label,value)=>{const z=add(grid,'div','mini-card');add(z,'div','mini-label',label);add(z,'strong','mini-number',format(value,'people'));};
