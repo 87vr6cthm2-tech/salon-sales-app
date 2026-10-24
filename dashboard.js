@@ -112,8 +112,14 @@ function renderStaff(){
   add(retPanel,'h3','','月別の再来店率');
   const retTiles=add(retPanel,'div','mini-grid');
   retFields.forEach(([label,key])=>{const tile=add(retTiles,'div','mini-card');add(tile,'div','mini-label',label);add(tile,'strong','mini-number',selected?.[key]==null?'未登録':pct(selected[key]));});
-  const retTable=add(retPanel,'div','');
-  monthlyTable(retTable,person.months.filter(x=>x.month<=9),retFields.map(([label,key])=>[label,key,'pct']));
+  const retRows=person.months.filter(x=>x.month<=9);
+  const retList=add(retPanel,'div','mobile-month-list');
+  for(const row of retRows){
+   const line=add(retList,'div','mobile-month-entry');
+   add(line,'strong','mobile-month-name',row.month+'月');
+   const values=add(line,'div','mobile-retention-grid');
+   for(const [label,key] of retFields){const cell=add(values,'div','mobile-retention-item');add(cell,'span','mobile-retention-label',label);add(cell,'b','',row[key]==null?'—':pct(row[key]));}
+  }
   chart('再来店率の推移（累計再来店率）',person.months.filter(x=>x.month<=9),x=>x.retentionCumulative,null,'pct');
   const lostPanel=add(content,'section','modern-panel');
   add(lostPanel,'h3','','月別の失客数');
@@ -124,7 +130,15 @@ function renderStaff(){
   add(lostTile,'strong','mini-number',lastLost==null?'未登録':num(lastLost)+'名');
   add(lostTile,'div','mini-sub',lastLost==null?'集計未登録':prior==null?'前月比：比較データなし':'前月比：'+(lastLost-prior>0?'+':'')+num(lastLost-prior)+'名'+(lastLost===prior?'（変化なし）':lastLost>prior?'（増加）':'（減少）'));
   const lostRows=person.months.filter(x=>x.month<=9);
-  monthlyTable(lostPanel,lostRows,[['失客数','lostCustomers','people']]);
+  const lostList=add(lostPanel,'div','mobile-lost-list');
+  for(const row of lostRows){
+   const line=add(lostList,'div','mobile-lost-entry');
+   add(line,'span','',row.month+'月');
+   add(line,'strong','',row.lostCustomers==null?'未登録':num(row.lostCustomers)+'名');
+   const prev=person.months.find(x=>x.month===row.month-1)?.lostCustomers;
+   const sub=row.lostCustomers==null||prev==null?'—':row.lostCustomers===prev?'±0名':(row.lostCustomers>prev?'+':'−')+num(Math.abs(row.lostCustomers-prev))+'名';
+   add(line,'small','',row.month===1?'—':sub);
+  }
   chart('失客数の推移',lostRows,x=>x.lostCustomers,null,'people');
 
   if(section==='sales'||section==='customers')monthlyTable(content,person.months,section==='sales'?[['指名技術売上','named','yen'],['総売上','total','yen'],['店販','retail','yen'],['指名客数','namedCustomers','people'],['前年比','yearOverYear','pct']]:[['総客数','totalCustomers','people'],['指名客数','namedCustomers','people'],['フリー客数','freeCustomers','people'],['新規','newCustomers','people'],['新規指名','newNamedCustomers','people']]);
