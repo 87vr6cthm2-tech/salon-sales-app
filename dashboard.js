@@ -9,8 +9,8 @@ function metric(target,label,value,hint,dark=false){const a=add(target,'article'
 function panel(title){const p=add($('body'),'section','panel');add(p,'h3','',title);return p}
 function table(p,headers,rows){const w=add(p,'div','tablewrap'),t=add(w,'table','table'),head=add(t,'thead'),tr=add(head,'tr');headers.forEach(x=>add(tr,'th','',x));const tb=add(t,'tbody');rows.forEach(row=>{const r=add(tb,'tr');row.forEach(x=>add(r,'td','',x))});}
 function bars(p,rows,key){const max=Math.max(1,...rows.map(x=>x[key]||0));rows.forEach(r=>{const line=add(p,'div','barline');add(line,'span','mon',r.month+'月');const track=add(line,'div','bars'),bar=add(track,'i');bar.style.width=(100*(r[key]||0)/max).toFixed(2)+'%';add(line,'span','val',yen(r[key]));})}
-function validate(d){if(!d||d.year!==2026||!Array.isArray(d.staff)||!d.storeMonthly||!Array.isArray(d.storeMonthly.months))throw Error('このアプリ用の実績JSONではありません。');const order=['木村','山岸','中村','藤野','関根'];d.staff.sort((a,b)=>{let i=order.indexOf(a.name),k=order.indexOf(b.name);return (i<0?999:i)-(k<0?999:k)});return d}
-function render(){const period=$('period'),old=period.value;period.replaceChildren();const dates=tab==='store'?(data?.storeMonthly?.months||[]):(data?.staff?.flatMap(x=>x.months)||[]);const months=[...new Set(dates.map(r=>Number(r.month)))].sort((a,b)=>a-b);for(const m of months){const x=add(period,'option','',m+'月');x.value=String(m)}period.value=[...period.options].some(x=>x.value===old)?old:String(months[months.length-1]||'');$('storeTab').classList.toggle('active',tab==='store');$('staffTab').classList.toggle('active',tab==='staff');show()}
+function validate(d){if(!d||d.year!==2026||!Array.isArray(d.staff)||!d.storeMonthly||!Array.isArray(d.storeMonthly.months))throw Error('このアプリ用の実績JSONではありません。');if(d.accessMode==='personal'&&(d.staff.length!==1||d.storeMonthly.months.length))throw Error('個人用データの形式が正しくありません。');const order=['木村','山岸','中村','藤野','関根'];d.staff.sort((a,b)=>{let i=order.indexOf(a.name),k=order.indexOf(b.name);return (i<0?999:i)-(k<0?999:k)});return d}
+function render(){const personal=data?.accessMode==='personal'&&data.staff.length===1; if(personal)tab='staff'; $('storeTab').style.display=personal?'none':''; $('staffTab').style.display=personal?'none':''; const period=$('period'),old=period.value;period.replaceChildren();const dates=tab==='store'?(data?.storeMonthly?.months||[]):(data?.staff?.flatMap(x=>x.months)||[]);const months=[...new Set(dates.map(r=>Number(r.month)))].sort((a,b)=>a-b);for(const m of months){const x=add(period,'option','',m+'月');x.value=String(m)}period.value=[...period.options].some(x=>x.value===old)?old:String(months[months.length-1]||'');$('storeTab').classList.toggle('active',tab==='store');$('staffTab').classList.toggle('active',tab==='staff');show()}
 function show(){const body=$('body');body.replaceChildren();$('viewTitle').textContent=tab==='store'?'船堀店 店舗実績':'スタイリスト別実績';$('viewSub').textContent=tab==='store'?'月末締め（登録された月のみ表示）':'15日締め。店舗集計とは締め日が異なります。';if(!data){const p=add(body,'div','empty');add(p,'strong','','2026年の実績ファイルを読み込んでください');add(p,'p','muted','数字は一般公開されず、この端末だけに保存されます。');return}if(tab==='store')renderStore();else renderStaff()}
 function monthlyTrend(title,rows,series){const p=panel(title);const wrap=add(p,'div','tablewrap');const t=add(wrap,'table','table');const h=add(t,'thead'),hr=add(h,'tr');['月',...series.map(x=>x[0])].forEach(x=>add(hr,'th','',x));const body=add(t,'tbody');for(const row of rows){const tr=add(body,'tr');add(tr,'td','',row.month+'月');for(const [label,key,format] of series){const value=typeof key==='function'?key(row):row[key];add(tr,'td','',value==null?'未登録':format==='yen'?yen(value):format==='pct'?pct(value):num(value)+'名');}}}
 function renderStore(){const m=$('period').value,rows=data.storeMonthly.months.filter(r=>m==='all'||r.month===Number(m));if(!rows.length)return;const aggregate=m==='all',sum=k=>total(rows,k),v=k=>aggregate?sum(k):rows[0][k],c=add($('body'),'div','metrics');const yoy=v('prevSales')?100*v('sales')/v('prevSales'):null;
@@ -22,7 +22,7 @@ const n=add($('body'),'p','notice','店舗データは月末締めです。未�
 function renderStaff(){
  const root=$('body'),personData=data.staff;
  if(!personData.length){add(root,'p','empty','スタッフデータがありません');return;}
- if(!personData.some(x=>x.name===staff))staff=personData[0].name;
+ if(data.accessMode==='personal'||!personData.some(x=>x.name===staff))staff=personData[0].name;
  const person=personData.find(x=>x.name===staff);
  let m=Number($('period').value);
  if(!Number.isInteger(m)||m<1)m=10;
@@ -31,7 +31,7 @@ function renderStaff(){
  const previous=r=>r&&r.yearOverYear>0?r.named*100/r.yearOverYear:null;
  const aggregate=(arr,k)=>arr.length&&arr.every(x=>x[k]!=null)?arr.reduce((n,x)=>n+x[k],0):null;
  const makeButton=(parent,label,onClick,selected)=>{const b=add(parent,'button','picker-button'+(selected?' selected':''),label);b.type='button';b.onclick=onClick;return b;};
- const staffRow=add(root,'div','staff-choices');
+ const staffRow=add(root,'div','staff-choices'); if(data.accessMode==='personal')staffRow.style.display='none';
  for(const p of [...personData].sort((a,b)=>{const order=['木村','山岸','中村','藤野','関根'];const ia=order.indexOf(a.name),ib=order.indexOf(b.name);return (ia<0?999:ia)-(ib<0?999:ib);}))makeButton(staffRow,p.name,()=>{staff=p.name;show();},p.name===staff);
  const controls=add(root,'div','staff-controls');
  const modeLabel=add(controls,'label','','集計　'),modeSelect=add(modeLabel,'select');
@@ -248,7 +248,7 @@ function renderStaff(){
  modeSelect.onchange=()=>{mode=modeSelect.value;refresh();};
  refresh();
 }
-$('storeTab').onclick=()=>{tab='store';render()};$('staffTab').onclick=()=>{tab='staff';render()};$('period').onchange=show;
+$('storeTab').onclick=()=>{if(data?.accessMode==='personal')return;tab='store';render()};$('staffTab').onclick=()=>{tab='staff';render()};$('period').onchange=show;
 $('import').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>3000000)throw Error('ファイルが大きすぎます');const obj=validate(JSON.parse(await file.text()));localStorage.setItem(key,JSON.stringify(obj));data=obj;render()}catch(err){alert('読み込みできません: '+err.message)}e.target.value=''};
 try{const raw=localStorage.getItem(key);if(raw)data=validate(JSON.parse(raw))}catch(e){console.warn(e)}render();
 })();
