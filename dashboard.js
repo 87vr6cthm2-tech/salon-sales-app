@@ -91,6 +91,8 @@ function renderStaff(){
    addCard('指名技術客単価〈暫定〉',customers?yen(amount/customers):'未入力','目標 ¥12,000');
    addCard('総売上（フリー込み）',format(v('total')),'元資料の独立項目');
    addCard('店販売上',format(v('retail')),'目標 店販比率10%');
+   const lostCount=year?(person.summary?.lostCustomersJanSep??null):(selected?.lostCustomers??(m===9?person.summary?.lostCustomersSeptember:null));
+   addCard('失客数',lostCount==null?'未登録':num(lostCount)+'名',year?'1〜9月の合計（10月は未登録）':m===10?'10月はデータ未登録':'選択月の失客人数');
    chart('指名売上の推移',person.months,x=>x.named,previous);
   }else if(section==='customers'){
    const grid=miniGrid();const addCard=(label,value)=>{const z=add(grid,'div','mini-card');add(z,'div','mini-label',label);add(z,'strong','mini-number',format(value,'people'));};
@@ -107,7 +109,7 @@ function renderStaff(){
    const details=add(content,'details','modern-panel');const title=add(details,'summary','', '月別の再来店率を見る');title.style.cursor='pointer';
    monthlyTable(details,person.months,[['新規','retentionNew','pct'],['新再','retentionNewReturn','pct'],['再来','retentionRepeat','pct'],['常連','retentionRegular','pct'],['リターン','retentionReturn','pct'],['累計','retentionCumulative','pct']]);
   }else if(section==='lost'){
-   const val=year?person.summary?.lostCustomersJanSep:v('lostCustomers');
+   const val=year?person.summary?.lostCustomersJanSep:(r?.lostCustomers??(m===9?person.summary?.lostCustomersSeptember:null));
    const grid=miniGrid(),card=add(grid,'div','mini-card');add(card,'div','mini-label','失客数 '+(year?'（1〜9月）':'（'+m+'月）'));add(card,'strong','mini-number',val==null?'未入力':num(val)+'名');
    chart('失客数の月別推移',person.months.filter(x=>x.month<=9),x=>x.lostCustomers,null,'people');
   }
