@@ -102,20 +102,31 @@ function renderStaff(){
    for(const [label,key]of [['総客数','totalCustomers'],['指名客数','namedCustomers'],['フリー客数','freeCustomers'],['新規客数','newCustomers'],['新規指名','newNamedCustomers']])addCard(label,v(key));
    chart('指名客数の推移',person.months,x=>x.namedCustomers,null,'people');
   }else if(section==='retention'){
-   const keys=[['新規','retentionNew'],['新再','retentionNewReturn'],['再来','retentionRepeat'],['常連','retentionRegular'],['リターン','retentionReturn'],['累計','retentionCumulative']];
-   const p=add(content,'section','modern-panel');add(p,'h3','', '再来店率 '+(year?'（1〜9月平均）':'（'+m+'月）'));
-   if(year)add(p,'p','muted','元資料の集計済み平均値。10月は未登録です。');
-   const summary=person.summary?.retentionAverageJanSep||{};
-   const summaryKeys={retentionNew:'new',retentionNewReturn:'newReturn',retentionRepeat:'repeat',retentionRegular:'regular',retentionReturn:'return',retentionCumulative:'cumulative'};
-   const rows=keys.map(([label,key])=>[label,pct(year?(summary[summaryKeys[key]]??null):r?.[key]??null)]);
-   table(p,['区分','選択期間'],rows);
-   const details=add(content,'details','modern-panel');const title=add(details,'summary','', '月別の再来店率を見る');title.style.cursor='pointer';
-   monthlyTable(details,person.months,[['新規','retentionNew','pct'],['新再','retentionNewReturn','pct'],['再来','retentionRepeat','pct'],['常連','retentionRegular','pct'],['リターン','retentionReturn','pct'],['累計','retentionCumulative','pct']]);
+   add(content,'p','muted','月別の再来店率を下に一覧表示します。');
   }else if(section==='lost'){
-   const val=year?person.summary?.lostCustomersJanSep:(r?.lostCustomers??(m===9?person.summary?.lostCustomersSeptember:null));
-   const grid=miniGrid(),card=add(grid,'div','mini-card');add(card,'div','mini-label','失客数 '+(year?'（1〜9月）':'（'+m+'月）'));add(card,'strong','mini-number',val==null?'未入力':num(val)+'名');
-   chart('失客数の月別推移',person.months.filter(x=>x.month<=9),x=>x.lostCustomers,null,'people');
+   add(content,'p','muted','月別の失客人数と前月比較を下に一覧表示します。');
   }
+  // Retention and lost-customer data stay visible without opening any tabs or accordions.
+  const retFields=[['新規再来率','retentionNew'],['新再率','retentionNewReturn'],['再来率','retentionRepeat'],['常連再来率','retentionRegular'],['リターン率','retentionReturn'],['累計再来店率','retentionCumulative']];
+  const retPanel=add(content,'section','modern-panel');
+  add(retPanel,'h3','','月別の再来店率');
+  const retTiles=add(retPanel,'div','mini-grid');
+  retFields.forEach(([label,key])=>{const tile=add(retTiles,'div','mini-card');add(tile,'div','mini-label',label);add(tile,'strong','mini-number',selected?.[key]==null?'未登録':pct(selected[key]));});
+  const retTable=add(retPanel,'div','');
+  monthlyTable(retTable,person.months.filter(x=>x.month<=9),retFields.map(([label,key])=>[label,key,'pct']));
+  chart('再来店率の推移（累計再来店率）',person.months.filter(x=>x.month<=9),x=>x.retentionCumulative,null,'pct');
+  const lostPanel=add(content,'section','modern-panel');
+  add(lostPanel,'h3','','月別の失客数');
+  const lastLost=selected?.lostCustomers??(m===9?person.summary?.lostCustomersSeptember:null);
+  const prior=person.months.find(x=>x.month===m-1)?.lostCustomers??null;
+  const lostTile=add(lostPanel,'div','mini-card');
+  add(lostTile,'div','mini-label',m+'月の失客数');
+  add(lostTile,'strong','mini-number',lastLost==null?'未登録':num(lastLost)+'名');
+  add(lostTile,'div','mini-sub',lastLost==null?'集計未登録':prior==null?'前月比：比較データなし':'前月比：'+(lastLost-prior>0?'+':'')+num(lastLost-prior)+'名'+(lastLost===prior?'（変化なし）':lastLost>prior?'（増加）':'（減少）'));
+  const lostRows=person.months.filter(x=>x.month<=9);
+  monthlyTable(lostPanel,lostRows,[['失客数','lostCustomers','people']]);
+  chart('失客数の推移',lostRows,x=>x.lostCustomers,null,'people');
+
   if(section==='sales'||section==='customers')monthlyTable(content,person.months,section==='sales'?[['指名技術売上','named','yen'],['総売上','total','yen'],['店販','retail','yen'],['指名客数','namedCustomers','people'],['前年比','yearOverYear','pct']]:[['総客数','totalCustomers','people'],['指名客数','namedCustomers','people'],['フリー客数','freeCustomers','people'],['新規','newCustomers','people'],['新規指名','newNamedCustomers','people']]);
 
   // Individual coaching cards: saved locally and never included in public source data.
