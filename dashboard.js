@@ -112,6 +112,12 @@ function renderStaff(){
   add(retPanel,'h3','','月別の再来店率');
   const retTiles=add(retPanel,'div','mini-grid');
   retFields.forEach(([label,key])=>{const tile=add(retTiles,'div','mini-card');add(tile,'div','mini-label',label);add(tile,'strong','mini-number',selected?.[key]==null?'未登録':pct(selected[key]));});
+  const averageTitle=add(retPanel,'h3','average-heading','2026年 1〜9月の平均');
+  const averages=add(retPanel,'div','average-grid');
+  const summary=person.summary?.retentionAverageJanSep||{};
+  const sourceKeys={retentionNew:'new',retentionNewReturn:'newReturn',retentionRepeat:'repeat',retentionRegular:'regular',retentionReturn:'return',retentionCumulative:'cumulative'};
+  for(const [label,key] of retFields){const entries=person.months.filter(x=>x.month<=9&&x[key]!=null);const fromSource=summary[sourceKeys[key]];const value=fromSource!=null?fromSource:entries.length===9?entries.reduce((sum,x)=>sum+Number(x[key]),0)/9:null;const e=add(averages,'div','average-item');add(e,'small','',label);add(e,'strong','',value==null?'未登録':pct(value));}
+  add(retPanel,'p','muted','元資料の1〜9月平均を優先表示。ない場合は9か月すべての数値がある項目だけ単純平均を計算しています。');
   const retRows=person.months.filter(x=>x.month<=9);
   const retList=add(retPanel,'div','mobile-month-list');
   for(const row of retRows){
@@ -130,6 +136,12 @@ function renderStaff(){
   add(lostTile,'strong','mini-number',lastLost==null?'未登録':num(lastLost)+'名');
   add(lostTile,'div','mini-sub',lastLost==null?'集計未登録':prior==null?'前月比：比較データなし':'前月比：'+(lastLost-prior>0?'+':'')+num(lastLost-prior)+'名'+(lastLost===prior?'（変化なし）':lastLost>prior?'（増加）':'（減少）'));
   const lostRows=person.months.filter(x=>x.month<=9);
+  const lostValues=lostRows.filter(x=>x.lostCustomers!=null);
+  const totalLost=lostValues.length===9?lostValues.reduce((sum,x)=>sum+Number(x.lostCustomers),0):person.summary?.lostCustomersJanSep??null;
+  const avgLost=totalLost==null?null:totalLost/9;
+  const overall=add(lostPanel,'div','loss-average');
+  add(overall,'span','','1〜9月の月平均');add(overall,'strong','',avgLost==null?'未登録':avgLost.toFixed(1)+'名');
+  add(overall,'small','',totalLost==null?'':'9か月合計 '+num(totalLost)+'名');
   const lostList=add(lostPanel,'div','mobile-lost-list');
   for(const row of lostRows){
    const line=add(lostList,'div','mobile-lost-entry');
