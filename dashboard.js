@@ -32,7 +32,7 @@ function renderStaff(){
  const aggregate=(arr,k)=>arr.length&&arr.every(x=>x[k]!=null)?arr.reduce((n,x)=>n+x[k],0):null;
  const makeButton=(parent,label,onClick,selected)=>{const b=add(parent,'button','picker-button'+(selected?' selected':''),label);b.type='button';b.onclick=onClick;return b;};
  const staffRow=add(root,'div','staff-choices');
- for(const p of personData)makeButton(staffRow,p.name,()=>{staff=p.name;show();},p.name===staff);
+ for(const p of [...personData].sort((a,b)=>{const order=['木村','中村','山岸','藤野','関根'];const ia=order.indexOf(a.name),ib=order.indexOf(b.name);return (ia<0?999:ia)-(ib<0?999:ib);}))makeButton(staffRow,p.name,()=>{staff=p.name;show();},p.name===staff);
  const controls=add(root,'div','staff-controls');
  const modeLabel=add(controls,'label','','集計　'),modeSelect=add(modeLabel,'select');
  for(const [key,name] of [['month','単月'],['year','1〜10月累計']]){const option=add(modeSelect,'option','',name);option.value=key;}
