@@ -96,6 +96,51 @@ function renderStaff(){
    const difference=!year&&lostCount!=null&&priorLost!=null?lostCount-priorLost:null;
    const lostNote=year?'1〜9月の合計（10月は未登録）':lostCount==null?'選択月のデータ未登録':difference==null?'前月比：比較データなし':difference===0?'前月比：±0名（変化なし）':difference>0?'前月比：+'+num(difference)+'名（増加）':'前月比：'+num(difference)+'名（減少）';
    addCard('失客数',lostCount==null?'未登録':num(lostCount)+'名',lostNote);
+
+   // Actionable KPI scorecard and goal simulation, visible on the sales landing screen.
+   const score=add(content,'section','modern-panel sales-scorecard');
+   add(score,'h3','','売上改善スコアカード');
+   const kpiItems=[
+    ['指名技術客単価',customers&&amount!=null?amount/customers:null,12000,'yen'],
+    ['店販比率',v('total')>0&&v('retail')!=null?100*v('retail')/v('total'):null,10,'pct'],
+    ['次回予約率',year?null:selected?.reservation??null,60,'pct']
+   ];
+   for(const [name,value,target,unit] of kpiItems){
+    const line=add(score,'div','score-row');
+    add(line,'span','',name);
+    add(line,'strong','',value==null?'未登録':unit==='yen'?yen(value):pct(value));
+    add(line,'small','',unit==='yen'?'目標 '+yen(target):'目標 '+pct(target));
+    add(line,'b','score-state '+(value!=null&&value>=target?'met':'needs'),value==null?'—':value>=target?'達成':'改善');
+   }
+   if(!year){
+    const box=add(content,'section','modern-panel goal-simulator');
+    add(box,'h3','','目標達成シミュレーション');
+    const label=add(box,'label','','指名技術売上の月間目標（円）');
+    const input=add(label,'input');input.type='number';input.inputMode='numeric';input.min='1';input.step='1000';input.placeholder='目標を入力';
+    const goalKey=person.name+'-2026-'+m;
+    let saved={};try{saved=JSON.parse(localStorage.getItem('salon-note-coaching-v1')||'{}')||{}}catch(e){}
+    input.value=saved[goalKey]?.namedGoal??'';
+    const output=add(box,'div','goal-result');
+    const fill=add(box,'div','goal-track');const fillbar=add(fill,'i','goal-fill');
+    const meta=add(box,'p','muted','');const save=add(box,'button','coach-save','この目標を保存');
+    const draw=()=>{
+     const target=Number(input.value);
+     if(!input.value.trim()||!Number.isFinite(target)||target<=0||amount==null){output.textContent='個人目標を入力すると、達成率と必要人数を表示します。';meta.textContent='';fillbar.style.width='0%';return;}
+     const gap=Math.max(0,target-amount),ticket=customers>0?amount/customers:null;
+     const pieces=['達成率 '+pct(amount/target*100),'あと '+yen(gap)];
+     if(ticket>0)pieces.push('指名客数の目安 '+Math.ceil(gap/ticket)+'名');
+     output.textContent=pieces.join(' ／ ');fillbar.style.width=Math.min(100,100*amount/target).toFixed(1)+'%';
+     meta.textContent='現在の指名技術客単価を使った参考値です。実際の売上は施術内容により異なります。';
+    };
+    input.oninput=draw;draw();
+    save.onclick=()=>{
+     const target=Number(input.value);
+     if(!input.value.trim()||!Number.isFinite(target)||target<=0){meta.textContent='正の金額を入力してください。';return;}
+     try{const all=JSON.parse(localStorage.getItem('salon-note-coaching-v1')||'{}')||{};all[goalKey]={...(all[goalKey]||{}),namedGoal:target};localStorage.setItem('salon-note-coaching-v1',JSON.stringify(all));meta.textContent='目標をこの端末に保存しました。';}
+     catch(e){meta.textContent='保存に失敗しました。';}
+    };
+   }
+
    chart('指名売上の推移',person.months,x=>x.named,previous);
   }else if(section==='customers'){
    const grid=miniGrid();const addCard=(label,value)=>{const z=add(grid,'div','mini-card');add(z,'div','mini-label',label);add(z,'strong','mini-number',format(value,'people'));};
