@@ -6,8 +6,8 @@
   const receive=e=>{if(e.source!==frame.contentWindow)return;if(e.data?.ready){file.arrayBuffer().then(buffer=>frame.contentWindow.postMessage({buffer},'*',[buffer])).catch(err=>done(err))}else if(e.data?.error)done(Error(e.data.error));else if(e.data?.sheets)done(null,e.data.sheets)};
   window.addEventListener('message',receive);document.body.append(frame);timer=setTimeout(()=>done(Error('Excel読込がタイムアウトしました。ChatGPTからの取込を利用してください')),30000);
  })}
- function init(){const host=document.querySelector('.tools');if(!host)return;
-  const label=document.createElement('label');label.className='upload';label.textContent='Excelを手動取込（予備）';const input=document.createElement('input');input.type='file';input.accept='.xlsx';label.append(input);host.append(label);
+ function init(){const host=document.querySelector('.import-actions');if(!host)return;
+  const label=document.createElement('label');label.className='upload';label.textContent='Excelから取込（予備）';const input=document.createElement('input');input.type='file';input.accept='.xlsx';label.append(input);host.append(label);
   const status=document.createElement('p');status.className='muted';host.append(status);
   input.onchange=async()=>{const f=input.files[0];input.value='';if(!f)return;
    try{if(f.size>5000000)throw Error('5MB以下のExcelを選択してください');status.textContent='読み取り中…';

@@ -2,11 +2,11 @@
 (function(){
  const C=window.SalonData,E=window.SalonCrypto,P=window.SalonProtocol;
  const PRIVATE='salon-note-sync-private-key-v1';let busy=false,pending=null;
- const $=id=>document.getElementById(id),notify=t=>{$('sync-status').textContent=t};
+ const $=id=>document.getElementById(id),notify=t=>{$('sync-status').textContent=t;const hint=$('sync-indicator');if(hint)hint.textContent=t.startsWith('同期済み')?'同期済み':t.includes('初回設定')?'同期の初回設定が必要です':t.includes('相違')?'更新内容の確認が必要です':t.includes('できません')?'同期を確認してください':'同期設定は「設定・データ管理」から';};
  function download(name,text){const url=URL.createObjectURL(new Blob([text],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}
  async function getText(url,max){const r=await fetch(url,{cache:'no-store',credentials:'omit',redirect:'error'});if(r.status===404)return null;if(!r.ok)throw Error('通信エラー '+r.status);if(Number(r.headers.get('content-length'))>max)throw Error('同期ファイルが大きすぎます');const s=await r.text();if(s.length>max)throw Error('同期ファイルが大きすぎます');return s}
  function showConflict(result){
-  const area=$('sync-conflicts');area.replaceChildren();
+  const settings=$('app-settings');if(settings)settings.open=true;const area=$('sync-conflicts');area.replaceChildren();
   const title=document.createElement('p');title.textContent='既存値と異なるため更新を保留しました。修正版であることを確認して反映してください。';area.append(title);
   for(const x of result.conflicts){const p=document.createElement('p');p.textContent=`${x.store} ${x.year}年${x.month}月 ${x.staff||'店舗'} ${x.field}：${x.before} → ${x.after}`;area.append(p)}
   const b=document.createElement('button');b.textContent='この変更を確認して反映';b.onclick=()=>{
@@ -58,8 +58,8 @@
   }catch(e){notify('復元できません：'+e.message)}
  }
  function init(){
-  const host=document.querySelector('.tools');if(!host)return;
-  const wrap=document.createElement('section');wrap.style.cssText='width:100%;padding:12px;border:1px solid #dce5de;border-radius:10px;box-sizing:border-box';
+  const host=document.querySelector('.settings-tools');if(!host)return;
+  const wrap=document.createElement('section');wrap.className='sync-settings';
   wrap.innerHTML='<strong>非公開データの自動同期</strong><p id="sync-status" role="status"></p><button id="sync-setup">初回設定・公開鍵を表示</button> <button id="sync-backup">秘密鍵バックアップ</button> <label class="upload">秘密鍵を復元<input id="sync-restore" type="file" accept=".json"></label> <button id="sync-now">今すぐ同期</button><textarea id="sync-public" hidden readonly aria-label="ChatGPTに送る公開鍵" style="width:100%;height:90px;box-sizing:border-box"></textarea><div id="sync-conflicts" style="max-height:300px;overflow:auto"></div><p class="muted">公開鍵だけをChatGPTに送ってください。秘密鍵は端末変更時の復元に必要です。画面を開いた時・戻った時・表示中の約60秒ごとに更新を確認します。</p>';
   host.append(wrap);$('sync-setup').onclick=setup;$('sync-now').onclick=retrieve;
   $('sync-backup').onclick=()=>{try{const raw=localStorage.getItem(PRIVATE);if(!raw)throw Error('先に初回設定してください');download('salon-note-private-key-BACKUP.json',raw);notify('秘密鍵を「ファイル」に保存してください。ChatGPTやGitHubへ送らないでください')}catch(e){notify(e.message)}};
