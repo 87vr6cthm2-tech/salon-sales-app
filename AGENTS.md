@@ -14,7 +14,8 @@ When the user uploads Excel files and asks to update SALON NOTE, complete the fo
 1. Have the user use SALON NOTE's initial setup on their iPhone and send ONLY the public JWK. Never request a private key.
 2. Validate `kty`, modulus size and absence of `d`, `p`, `q`, `dp`, `dq`, `qi`. Compute the recipient ID with `SalonCrypto.keyId`.
 3. Store the public JWK (only `SalonCrypto.publicOnly` fields) and the explicitly chosen store ID in `sync-recipient.json`: `{ "version": 2, "store": "funabori", "publicKey": { ... } }`. Use the user's actual provided key, never a temporary or generated key.
-4. Do not activate a guessed recipient or send administrator data with a staff-specific key. Staff distribution requires separate filtered payloads and keys, and is outside the manager setup.
+4. The owner has authorized the same store and all staff actuals for enrolled staff devices. Maintain `sync-recipients.json` version 1 with `{keyId, store, scope:"store-all", enabled:true, publicKey}` entries. Keep the owner entry and existing histories. Register only actual public keys supplied for this purpose via the owner; never guess recipients. Never share private keys. No staff device is enrolled merely by opening the URL.
+5. On enrollment, send the available historical workbooks to the new device with `--scope store-all`; this migrates its personal view only after successful delivery and preserves its records. Conflicting existing values still require review. Do not delete local data to bypass conflicts.
 
 ## Each upload
 
@@ -29,3 +30,7 @@ When the user uploads Excel files and asks to update SALON NOTE, complete the fo
 ## Testing
 
 Run `node --test tests/sync.test.cjs` and `node tests/dashboard-smoke.cjs` for synchronization changes. For parser changes also run `node tests/real-workbooks.cjs` against the actual private files when available. This last test expects the two 2026 source templates used for initial development; update assertions for later periods instead of modifying their real data. Never commit those fixtures. The simulated DOM test is NOT a real browser/iPhone test.
+
+## Team delivery (use for every future Excel upload)
+
+Fetch the latest `sync-recipients.json` and the manifest for EVERY enabled recipient of the requested store. Save a private manifests JSON map keyed by keyId: the actual manifest or explicit null ONLY for a confirmed 404. Missing responses/errors are not null. Run `scripts/prepare-team.cjs --registry /private/registry.json --manifests /private/manifests.json --store funabori --out /private/new-output <workbooks>`. Publish the entire resulting sync directory in ONE commit only after the command succeeds for every device. Retain all prior envelope files and use expected_sha. Never publish partial failed output. The script excludes disabled devices. Disabling prevents future delivery, but cannot revoke already downloaded records. `sync-recipient.json` is legacy owner metadata; it is no longer the full delivery list.

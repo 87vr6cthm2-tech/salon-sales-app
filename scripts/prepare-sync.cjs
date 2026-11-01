@@ -23,6 +23,7 @@ async function main(){
  }
  const revision=manifest.updates.length+1,previous=manifest.updates.at(-1)?.hash||null;
  const payload={version:2,records:db.records,sourceHashes,createdAt:new Date().toISOString()};
+ if(opts.scope){if(opts.scope!=='store-all')throw Error('Invalid sharing scope');payload.sharing={mode:'store-all',store:opts.store};}
  const envelope=await E.encrypt(payload,jwk,revision,previous),text=JSON.stringify(envelope),hash=await E.hash(text);
  manifest={...manifest,updates:[...manifest.updates,{revision,hash}]};
  fs.mkdirSync(out,{recursive:true,mode:0o700});

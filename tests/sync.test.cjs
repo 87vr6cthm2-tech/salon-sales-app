@@ -4,6 +4,19 @@ const C=require('../data-core.js'),P=require('../excel-parser.js'),E=require('..
 const record=(v=100,month=1,staff=null,year=2026,store='funabori')=>({store,year,month,staff,values:staff?{named:v}:{sales:v}});
 const h='a'.repeat(64),keyId='b'.repeat(64),envelope={keyId,revision:1,previous:null};
 const payload=rs=>({version:2,records:rs,sourceHashes:[h]});
+test('explicit shared delivery migrates personal records, even with previously imported source',()=>{
+ const d=C.empty();d.accessMode='personal';d.personalName='木村';d.records=[record(90,12,'木村',2025)];d.imports=[h];
+ const p={...payload([record(),record(100,1,'山岸')]),sharing:{mode:'store-all',store:'funabori'}};
+ const result=S.apply(d,p,envelope,h);assert.equal(result.next.accessMode,'shared');assert.equal(result.next.records.length,3);assert.equal(d.accessMode,'personal');assert.equal(d.records.length,1);
+ const skipped=S.apply(d,p,envelope,h,'skip');assert.equal(skipped.next.accessMode,'personal');assert.equal(skipped.next.records.length,1);
+ assert.throws(()=>S.apply(d,{...p,sharing:{mode:'store-all',store:'mizue'}},envelope,h));
+});
+test('shared upgrade still blocks conflicting values and leaves original untouched',()=>{
+ const d=C.empty();d.accessMode='personal';d.personalName='木村';d.records=[record(100,1,'木村')];
+ const p={...payload([record(200,1,'木村'),record()]),sharing:{mode:'store-all',store:'funabori'}};
+ assert.equal(S.apply(d,p,envelope,h).blocked,true);assert.equal(d.accessMode,'personal');
+ const accepted=S.apply(d,p,envelope,h,true);assert.equal(accepted.next.accessMode,'shared');assert.equal(accepted.next.records[0].values.named,200);
+});
 test('repeat import is idempotent; blanks do not erase past values',()=>{let d=C.merge(null,[record()]).next;assert.equal(C.merge(d,[record()]).changes,0);const result=C.merge(d,[{...record(),values:{retail:0}}]);assert.equal(result.next.records[0].values.sales,100);assert.equal(result.next.records[0].values.retail,0)});
 test('conflicts never silently replace existing values',()=>{const old=C.merge(null,[record()]).next,result=C.merge(old,[record(80)]);assert.equal(result.conflicts.length,1);assert.equal(result.next.records[0].values.sales,100);assert.equal(C.merge(old,[record(80)],true).next.records[0].values.sales,80);assert.equal(old.records[0].values.sales,100)});
 test('store, year, month and staff keys remain distinct',()=>{const d=C.merge(null,[record(),record(200,1,null,2025),record(300,1,null,2026,'mizue'),record(400,1,'木村'),record(500,2)]).next;assert.equal(d.records.length,5);assert.equal(C.project(d,'mizue',2026).storeMonthly.months[0].sales,300)});

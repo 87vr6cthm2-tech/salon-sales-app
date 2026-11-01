@@ -33,7 +33,7 @@
     if(result.blocked){pending={payload,envelope,hash:item.hash};showConflict(result);notify('既存値との相違 '+result.conflicts.length+'件を確認してください');return}
     C.save(result.next);changes+=result.changes;
    }
-   notify('同期済み：'+manifest.updates.length+'回の更新を確認（今回 '+changes+'項目）');
+   notify('同期済み'+(C.read().accessMode==='shared'?'（店舗・全スタッフ共有）':'')+'：'+manifest.updates.length+'回の更新を確認（今回 '+changes+'項目）');
   }catch(e){notify('同期できません：'+e.message)}finally{busy=false}
  }
  async function publicKey(){
@@ -60,7 +60,7 @@
  function init(){
   const host=document.querySelector('.settings-tools');if(!host)return;
   const wrap=document.createElement('section');wrap.className='sync-settings';
-  wrap.innerHTML='<strong>非公開データの自動同期</strong><p id="sync-status" role="status"></p><button id="sync-setup">初回設定・公開鍵を表示</button> <button id="sync-backup">秘密鍵バックアップ</button> <label class="upload">秘密鍵を復元<input id="sync-restore" type="file" accept=".json"></label> <button id="sync-now">今すぐ同期</button><textarea id="sync-public" hidden readonly aria-label="ChatGPTに送る公開鍵" style="width:100%;height:90px;box-sizing:border-box"></textarea><div id="sync-conflicts" style="max-height:300px;overflow:auto"></div><p class="muted">公開鍵だけをChatGPTに送ってください。秘密鍵は端末変更時の復元に必要です。画面を開いた時・戻った時・表示中の約60秒ごとに更新を確認します。</p>';
+  wrap.innerHTML='<strong>非公開データの自動同期</strong><p>スタッフの方も、このスマホの公開鍵を木村さんへ送り、登録を依頼してください。登録後は店舗・全スタッフの実績が届きます。以前の本人用データは保持します。</p><p id="sync-status" role="status"></p><button id="sync-setup">このスマホを同期登録（公開鍵）</button> <button id="sync-backup">秘密鍵バックアップ</button> <label class="upload">秘密鍵を復元<input id="sync-restore" type="file" accept=".json"></label> <button id="sync-now">今すぐ同期</button><textarea id="sync-public" hidden readonly aria-label="ChatGPTに送る公開鍵" style="width:100%;height:90px;box-sizing:border-box"></textarea><div id="sync-conflicts" style="max-height:300px;overflow:auto"></div><p class="muted">公開鍵だけをChatGPTに送ってください。秘密鍵は端末変更時の復元に必要です。画面を開いた時・戻った時・表示中の約60秒ごとに更新を確認します。</p>';
   host.append(wrap);$('sync-setup').onclick=setup;$('sync-now').onclick=retrieve;
   $('sync-backup').onclick=()=>{try{const raw=localStorage.getItem(PRIVATE);if(!raw)throw Error('先に初回設定してください');download('salon-note-private-key-BACKUP.json',raw);notify('秘密鍵を「ファイル」に保存してください。ChatGPTやGitHubへ送らないでください')}catch(e){notify(e.message)}};
   $('sync-restore').onchange=e=>{const file=e.target.files[0];e.target.value='';restore(file)};
