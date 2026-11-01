@@ -43,12 +43,14 @@
      }else if(kind==='失客数'||kind==='次回予約率'){
       for(let c=1;c<=12;c++){const m=month(rows[i][c]);if(!m)throw Error('月見出しが不正です');set(y,m,name,kind==='失客数'?'lostCustomers':'reservation',rows[i+1]?.[c],kind==='次回予約率')}
      }else{
-      const fields=kind==='客数'?['totalCustomers','namedCustomers','freeCustomers','newCustomers','newNamedCustomers']:['retentionNew','retentionNewReturn','retentionRepeat','retentionRegular','retentionReturn','retentionCumulative'];
+      const labels=kind==='客数'?{'総客数':'totalCustomers','指名客数':'namedCustomers','フリー客数':'freeCustomers','新規+フリー客数':'freeCustomers','新規客数':'newCustomers','新規指名':'newNamedCustomers'}:{'新規':'retentionNew','新再':'retentionNewReturn','再来':'retentionRepeat','常連':'retentionRegular','リターン':'retentionReturn','累計':'retentionCumulative'};
+      const columns=rows[i].slice(1,7).map((label,c)=>({key:labels[norm(label)],col:c+1})).filter(x=>x.key);
+      if(!columns.length||new Set(columns.map(x=>x.key)).size!==columns.length)throw Error('客数・再来率の列見出しが不正です');
       for(let j=i+1;j<rows.length&&!names.has(norm(rows[j][0]));j++){
        if(!/^\d{1,2}月$/.test(norm(rows[j][0])))continue;const m=month(rows[j][0]);if(!m)continue;
        // Formula-only zero placeholders in future customer months are not actuals.
        if(kind==='客数'&&rows[j][1]==null&&rows[j][2]==null)continue;
-       fields.forEach((k,c)=>set(y,m,name,k,rows[j][c+1],kind!=='客数'));
+       columns.forEach(({key,col})=>set(y,m,name,key,rows[j][col],kind!=='客数'));
       }
      }
     }
