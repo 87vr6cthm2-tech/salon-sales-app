@@ -1,96 +1,71 @@
 'use strict';
-/* Encrypted, read-only remote updates. The public site never receives a plaintext sales dataset. */
-(async function(){
- const STORAGE='salon-note-funabori-dashboard-v2', PRIVATE='salon-note-sync-private-key-v1';
- const allowedStore=['sales','technical','retail','customers','newCustomers','reservation','productivityTechnical','productivityTotal','dailyFte','ticket','technicalTicket','prevSales','prevTechnical'];
- const allowedStaff=['named','retail','total','namedCustomers','yearOverYear','totalCustomers','freeCustomers','newCustomers','newNamedCustomers','reservation','lostCustomers','retentionNew','retentionNewReturn','retentionRepeat','retentionRegular','retentionReturn','retentionCumulative'];
- const $=id=>document.getElementById(id);
- const asB64=u=>btoa(String.fromCharCode(...u)),fromB64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
- const notify=t=>{const e=$('sync-status');if(e)e.textContent=t};
- const valid=n=>typeof n==='number'&&Number.isFinite(n)&&n>=0&&n<1e12;
- const safeMonth=r=>Number.isInteger(r?.month)&&r.month>=1&&r.month<=12;
- function mergePatch(patch){
-  if(!patch||patch.version!==1||patch.year!==2026)throw Error('同期データの形式が不正です');
-  const current=JSON.parse(localStorage.getItem(STORAGE)||'null')||{year:2026,staff:[],storeMonthly:{months:[]}};
-  if(current.accessMode==='personal'&&patch.storeMonthly?.months?.length)throw Error('個人用画面で店舗全体の更新はできません');
-  const next=structuredClone(current);let changes=0;
-  if(Array.isArray(patch.storeMonthly?.months)){
-   if(patch.storeMonthly.months.length>12)throw Error('月数が不正です');
-   next.storeMonthly=next.storeMonthly||{months:[]};
-   for(const r of patch.storeMonthly.months){
-    if(!safeMonth(r))throw Error('月が不正です');
-    let target=next.storeMonthly.months.find(x=>x.month===r.month);
-    if(!target){target={month:r.month};next.storeMonthly.months.push(target);}
-    for(const k of allowedStore)if(Object.hasOwn(r,k)){
-     if(!valid(r[k]))throw Error(k+'の値が不正です');
-     if(target[k]!==r[k]){target[k]=r[k];changes++;}
-    }
-   }
-   next.storeMonthly.months.sort((a,b)=>a.month-b.month);
-  }
-  if(Array.isArray(patch.staff)){
-   if(patch.staff.length>5)throw Error('人数が不正です');
-   for(const person of patch.staff){
-    if(!['木村','山岸','中村','藤野','関根'].includes(person.name)||!Array.isArray(person.months)||person.months.length>12)throw Error('スタッフ形式が不正です');
-    if(current.accessMode==='personal'&&current.staff[0]?.name!==person.name)continue;
-    let dest=next.staff.find(x=>x.name===person.name);
-    if(!dest){dest={name:person.name,months:[],summary:{}};next.staff.push(dest);}
-    for(const r of person.months){
-     if(!safeMonth(r))throw Error('月が不正です');
-     let record=dest.months.find(x=>x.month===r.month);
-     if(!record){record={month:r.month};dest.months.push(record);}
-     for(const k of allowedStaff)if(Object.hasOwn(r,k)){
-      if(!valid(r[k]))throw Error(k+'の値が不正です');
-      if(record[k]!==r[k]){record[k]=r[k];changes++;}
-     }
-    }
-    dest.months.sort((a,b)=>a.month-b.month);
-   }
-  }
-  return {next,changes};
+(function(){
+ const C=window.SalonData,E=window.SalonCrypto,P=window.SalonProtocol;
+ const PRIVATE='salon-note-sync-private-key-v1';let busy=false,pending=null;
+ const $=id=>document.getElementById(id),notify=t=>{$('sync-status').textContent=t};
+ function download(name,text){const url=URL.createObjectURL(new Blob([text],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}
+ async function getText(url,max){const r=await fetch(url,{cache:'no-store',credentials:'omit',redirect:'error'});if(r.status===404)return null;if(!r.ok)throw Error('通信エラー '+r.status);if(Number(r.headers.get('content-length'))>max)throw Error('同期ファイルが大きすぎます');const s=await r.text();if(s.length>max)throw Error('同期ファイルが大きすぎます');return s}
+ function showConflict(result){
+  const area=$('sync-conflicts');area.replaceChildren();
+  const title=document.createElement('p');title.textContent='既存値と異なるため更新を保留しました。修正版であることを確認して反映してください。';area.append(title);
+  for(const x of result.conflicts){const p=document.createElement('p');p.textContent=`${x.store} ${x.year}年${x.month}月 ${x.staff||'店舗'} ${x.field}：${x.before} → ${x.after}`;area.append(p)}
+  const b=document.createElement('button');b.textContent='この変更を確認して反映';b.onclick=()=>{
+   if(!pending||!confirm('表示した既存値を変更します。更新前の状態は端末内に保存されます。反映しますか？'))return;
+   try{const result=P.apply(C.read(),pending.payload,pending.envelope,pending.hash,true);C.save(result.next);pending=null;area.replaceChildren();notify('確認した変更を反映しました');retrieve()}catch(e){notify('反映できません：'+e.message)}
+  };area.append(b);
+  const skip=document.createElement('button');skip.textContent='この更新を見送り、既存値を保持';skip.onclick=()=>{if(!pending||!confirm('この更新全体を見送ります。新しい月も取り込まず、次の更新へ進みますか？'))return;try{const result=P.apply(C.read(),pending.payload,pending.envelope,pending.hash,'skip');C.save(result.next);pending=null;area.replaceChildren();notify('更新を見送りました');retrieve()}catch(e){notify(e.message)}};area.append(skip);
  }
  async function retrieve(){
-  const privateJwk=localStorage.getItem(PRIVATE);if(!privateJwk){notify('初回設定が必要です');return}
+  if(busy||pending)return;busy=true;
   try{
-   const response=await fetch('./private-sync.json?t='+Date.now(),{cache:'no-store'});
-   if(response.status===404){notify('同期用データはまだ登録されていません');return}
-   if(!response.ok)throw Error('同期サーバーに接続できません');
-   const envelope=await response.json();
-   if(envelope.version!==1||envelope.algorithm!=='RSA-OAEP-256+A256GCM')throw Error('暗号化形式が不正です');
-   const key=await crypto.subtle.importKey('jwk',JSON.parse(privateJwk),{name:'RSA-OAEP',hash:'SHA-256'},false,['decrypt']);
-   const rawKey=await crypto.subtle.decrypt({name:'RSA-OAEP'},key,fromB64(envelope.wrappedKey));
-   const aes=await crypto.subtle.importKey('raw',rawKey,'AES-GCM',false,['decrypt']);
-   const decrypted=await crypto.subtle.decrypt({name:'AES-GCM',iv:fromB64(envelope.iv)},aes,fromB64(envelope.ciphertext));
-   const patch=JSON.parse(new TextDecoder().decode(decrypted));
-   const {next,changes}=mergePatch(patch);
-   if(changes){localStorage.setItem(STORAGE,JSON.stringify(next));notify('自動同期が完了しました（'+changes+'項目）');setTimeout(()=>location.reload(),300);}
-   else notify('最新の実績に更新済みです');
-  }catch(e){notify('同期できません：'+e.message)}
+   const raw=localStorage.getItem(PRIVATE);if(!raw){notify('初回設定で公開鍵をChatGPTに送ってください');return}
+   const privateJwk=JSON.parse(raw),id=await E.keyId(privateJwk),base='./sync/'+id+'/';
+   const text=await getText(base+'manifest.json?t='+Date.now(),2_000_000);if(text===null){notify('初回設定済み。ChatGPTからの更新待ちです');return}
+   const manifest=JSON.parse(text);P.checkManifest(manifest,id,C.read().sync[id]);
+   let changes=0;
+   for(const item of manifest.updates){
+    if(item.revision<=(C.read().sync[id]?.revision||0))continue;
+    const body=await getText(base+item.hash+'.json',8_000_000);if(body===null)throw Error('更新ファイルの公開待ちです。後で再試行します');
+    if(await E.hash(body)!==item.hash)throw Error('更新ファイルの整合性を確認できません');
+    const envelope=JSON.parse(body);if(envelope.keyId!==id||envelope.revision!==item.revision)throw Error('宛先・更新番号が一致しません');
+    const payload=await E.decrypt(envelope,privateJwk);
+    const result=P.apply(C.read(),payload,envelope,item.hash);
+    if(result.blocked){pending={payload,envelope,hash:item.hash};showConflict(result);notify('既存値との相違 '+result.conflicts.length+'件を確認してください');return}
+    C.save(result.next);changes+=result.changes;
+   }
+   notify('同期済み：'+manifest.updates.length+'回の更新を確認（今回 '+changes+'項目）');
+  }catch(e){notify('同期できません：'+e.message)}finally{busy=false}
  }
- function downloadText(name,content){
-  const a=document.createElement('a');const url=URL.createObjectURL(new Blob([content],{type:'application/json'}));
-  a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);
+ async function publicKey(){
+  try{const raw=localStorage.getItem(PRIVATE);if(!raw)throw Error('先に初回設定をしてください');const pub=JSON.stringify(E.publicOnly(JSON.parse(raw)));$('sync-public').value=pub;$('sync-public').hidden=false;try{await navigator.clipboard.writeText(pub);notify('公開鍵をコピーしました。ChatGPTに送ってください')}catch{notify('下の公開鍵をコピーしてChatGPTに送ってください')}}catch(e){notify(e.message)}
  }
  async function setup(){
-  if(localStorage.getItem(PRIVATE)){notify('暗号鍵の設定済みです');return}
+  if(localStorage.getItem(PRIVATE)){await publicKey();return}
   try{
    const pair=await crypto.subtle.generateKey({name:'RSA-OAEP',modulusLength:3072,publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'},true,['encrypt','decrypt']);
-   const publicJwk=await crypto.subtle.exportKey('jwk',pair.publicKey),privateJwk=await crypto.subtle.exportKey('jwk',pair.privateKey);
-   const backup=JSON.stringify(privateJwk,null,2);
-   downloadText('salon-note-private-key-BACKUP.json',backup);
-   localStorage.setItem(PRIVATE,JSON.stringify(privateJwk));
-   const pubText=JSON.stringify(publicJwk);
-   try{await navigator.clipboard.writeText(pubText);notify('秘密鍵を保存しました。ダウンロードした秘密鍵を安全に保管し、コピーされた公開鍵をChatGPTに送信してください。');}
-   catch{const area=$('sync-public');area.value=pubText;area.hidden=false;notify('秘密鍵のバックアップを安全に保管し、下の公開鍵だけをChatGPTに送ってください。');}
-  }catch(e){notify('鍵を作成できません：'+e.message)}
+   const jwk=await crypto.subtle.exportKey('jwk',pair.privateKey);localStorage.setItem(PRIVATE,JSON.stringify(jwk));await publicKey();
+   notify('初回設定済み。公開鍵をChatGPTへ送信し、「秘密鍵バックアップ」も保存してください');
+  }catch(e){notify('設定できません：'+e.message)}
+ }
+ async function restore(file){
+  if(!file)return;
+  try{
+   if(file.size>10000)throw Error('鍵ファイルが大きすぎます');const jwk=JSON.parse(await file.text());
+   if(!jwk.d)throw Error('秘密鍵バックアップを選択してください');await E.keyId(jwk);
+   const pub=E.publicOnly(jwk),probe=await E.encrypt({test:true},pub,1,null);await E.decrypt(probe,jwk);
+   if(localStorage.getItem(PRIVATE)&&!confirm('同期鍵をバックアップの鍵に切り替えますか？'))return;
+   localStorage.setItem(PRIVATE,JSON.stringify(jwk));pending=null;$('sync-conflicts').replaceChildren();await publicKey();await retrieve();
+  }catch(e){notify('復元できません：'+e.message)}
  }
  function init(){
   const host=document.querySelector('.tools');if(!host)return;
-  const wrap=document.createElement('div');wrap.style.cssText='width:100%;font-size:12px;line-height:1.8;padding:12px;border:1px solid #dce5de;border-radius:10px;';
-  wrap.innerHTML='<strong>非公開データの自動同期</strong><div id="sync-status">確認中…</div><button type="button" id="sync-setup" style="margin:6px 6px 0 0;padding:8px">初回設定（秘密鍵バックアップ）</button><button type="button" id="sync-now" style="padding:8px">今すぐ同期</button><textarea id="sync-public" hidden readonly style="width:100%;height:85px;margin-top:8px"></textarea><div>秘密鍵はChatGPTやGitHubに送らないでください。端末を変更する場合はバックアップが必要です。</div>';
-  host.append(wrap);
-  $('sync-setup').onclick=setup;$('sync-now').onclick=retrieve;
-  retrieve();
+  const wrap=document.createElement('section');wrap.style.cssText='width:100%;padding:12px;border:1px solid #dce5de;border-radius:10px;box-sizing:border-box';
+  wrap.innerHTML='<strong>非公開データの自動同期</strong><p id="sync-status" role="status"></p><button id="sync-setup">初回設定・公開鍵を表示</button> <button id="sync-backup">秘密鍵バックアップ</button> <label class="upload">秘密鍵を復元<input id="sync-restore" type="file" accept=".json"></label> <button id="sync-now">今すぐ同期</button><textarea id="sync-public" hidden readonly aria-label="ChatGPTに送る公開鍵" style="width:100%;height:90px;box-sizing:border-box"></textarea><div id="sync-conflicts" style="max-height:300px;overflow:auto"></div><p class="muted">公開鍵だけをChatGPTに送ってください。秘密鍵は端末変更時の復元に必要です。画面を開いた時・戻った時・表示中の約60秒ごとに更新を確認します。</p>';
+  host.append(wrap);$('sync-setup').onclick=setup;$('sync-now').onclick=retrieve;
+  $('sync-backup').onclick=()=>{try{const raw=localStorage.getItem(PRIVATE);if(!raw)throw Error('先に初回設定してください');download('salon-note-private-key-BACKUP.json',raw);notify('秘密鍵を「ファイル」に保存してください。ChatGPTやGitHubへ送らないでください')}catch(e){notify(e.message)}};
+  $('sync-restore').onchange=e=>{const file=e.target.files[0];e.target.value='';restore(file)};
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)retrieve()});window.addEventListener('online',retrieve);window.addEventListener('pageshow',retrieve);
+  setInterval(()=>{if(!document.hidden)retrieve()},60000);retrieve();
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

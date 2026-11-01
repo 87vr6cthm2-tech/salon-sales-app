@@ -1,0 +1,12 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.sheetjs.com; connect-src 'none'; img-src 'none'; style-src 'none'"><script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script></head><body><script>
+// Runs in an opaque sandbox. It cannot read the parent's data or private key.
+addEventListener('message',event=>{
+ if(event.source!==parent||!(event.data?.buffer instanceof ArrayBuffer))return;
+ try{
+  if(event.data.buffer.byteLength>5000000)throw Error('5MBを超えています');
+  const book=XLSX.read(event.data.buffer,{type:'array',cellFormula:false,sheetRows:2001}),sheets={};
+  for(const name of book.SheetNames){const sh=book.Sheets[name],range=XLSX.utils.decode_range(sh['!ref']||'A1');if(range.e.r>=2000||range.e.c>=100)throw Error('対応する表のサイズを超えています');sheets[name]=XLSX.utils.sheet_to_json(sh,{header:1,defval:null,raw:true})}
+  parent.postMessage({sheets},'*');
+ }catch(e){parent.postMessage({error:e.message},'*')}
+});parent.postMessage(window.XLSX?{ready:true}:{error:'Excel読込ライブラリを取得できません'},'*');
+</script></body></html>

@@ -1,0 +1,10 @@
+# Keep private inputs and intermediate plaintext outside the checkout.
+*.xlsx
+*.xls
+*.csv
+*private-key*
+*BACKUP*
+*backup*.json
+source-excel/
+node_modules/
+__pycache__/
